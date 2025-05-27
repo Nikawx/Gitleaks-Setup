@@ -1,10 +1,10 @@
-# 🔐 Gitleaks Setup on Azure DevOps Pipeline
+# Gitleaks Setup on Azure DevOps Pipeline
 
 This guide explains how to integrate **Gitleaks** into your Azure DevOps pipeline to detect hardcoded secrets and sensitive information in your codebase.
 
 ---
 
-## 📁 First Steps
+## First Steps
 
 1. Create a directory named `.azure-pipelines` at the root of your repository.
 
@@ -14,7 +14,7 @@ This guide explains how to integrate **Gitleaks** into your Azure DevOps pipelin
 
 ---
 
-## ⚙️ Creating the Pipeline in Azure DevOps
+## Creating the Pipeline in Azure DevOps
 
 1. Go to **Pipelines** in your Azure DevOps project.
 2. Click **"New pipeline"**.
@@ -28,7 +28,7 @@ This guide explains how to integrate **Gitleaks** into your Azure DevOps pipelin
 
 ---
 
-## 📄 Reporting
+## Reporting
 
 - The scan results are saved in **JSON format**.
 - A simplified **HTML report** is generated and published as an artifact named `Gitleaks-HTML-Reports`.
@@ -37,7 +37,7 @@ This guide explains how to integrate **Gitleaks** into your Azure DevOps pipelin
 
 ---
 
-## 🚫 Ignoring Rules
+## Ignoring Rules
 
 To customize or ignore specific findings, create a configuration file named `.gitleaks.toml` in the root of your repository.
 
