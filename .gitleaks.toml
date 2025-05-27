@@ -1,0 +1,6 @@
+[[rules]]
+description = "Ignore AWS Secret Access Key"
+id = "aws-secret-access-key"
+regex = '''AKIA[0-9A-Z]{16}'''
+tags = ["key", "AWS"]
+allowlist = { paths = ["test/"], commits = [] }
