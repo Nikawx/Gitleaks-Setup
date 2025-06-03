@@ -51,5 +51,8 @@ regex = '''AKIA[0-9A-Z]{16}'''
 tags = ["key", "AWS"]
 allowlist = { paths = ["test/"], commits = [] }
 ```
+
+---
+
 ## Git History Cleanup (Optional)
 If secrets are found, the pipeline uses *git-filter-repo* to rewrite the entire Git history, replacing each detected secret with "REDACTED" to ensure they are permanently removed from all previous commits.
