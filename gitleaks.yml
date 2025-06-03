@@ -10,76 +10,98 @@ variables:
   reportDir: '$(System.DefaultWorkingDirectory)/gitleaks-reports'
   summaryFile: '$(Build.ArtifactStagingDirectory)/gitleaks-summary.md'
   artifactHtmlDir: '$(Build.ArtifactStagingDirectory)/gitleaks-html'
+  allowForcePush: false
 
 jobs:
-  - job: GitleaksScan
-    displayName: Run Gitleaks scan
+  - job: GitleaksCleanAndReport
+    displayName: Gitleaks scan + nettoyage historique + rapports
     steps:
       - checkout: self
+        persistCredentials: true
 
       - script: |
-          echo "📥 Téléchargement de Gitleaks..."
+          echo "Installer Gitleaks"
           GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-          echo "Dernière version: $GITLEAKS_VERSION"
-
           curl -LO https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz
           tar -xzf gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz
           chmod +x gitleaks
           sudo mv gitleaks /usr/local/bin/
           gitleaks version
-        displayName: "📦 Installer Gitleaks"
+        displayName: "Installer Gitleaks"
 
       - script: |
-          echo "🔎 Lancement du scan Gitleaks (JSON)"
+          echo "Lancer le scan Gitleaks (JSON)"
           mkdir -p $(reportDir)
-          gitleaks detect --source . --report-format=json --report-path=$(reportDir)/gitleaks.json || echo "🚨 Secrets détectés (mais le pipeline continue)."
-        displayName: "🚨 Exécuter Gitleaks (JSON)"
+          gitleaks detect --source . --report-format=json --report-path=$(reportDir)/gitleaks.json || echo "Secrets détectés (le pipeline continue)"
+        displayName: "Exécuter Gitleaks (JSON)"
 
       - script: |
-          echo "📝 Génération du résumé Markdown (top 20)"
+          echo "Générer résumé Markdown (top 20)"
           echo "## Résumé Gitleaks" > $(summaryFile)
           echo "" >> $(summaryFile)
-
-          echo "### 📂 Rapport HTML disponible en artefact **Gitleaks-HTML-Reports**" >> $(summaryFile)
+          echo "### Rapport HTML disponible en artefact **Gitleaks-HTML-Reports**" >> $(summaryFile)
           echo "" >> $(summaryFile)
-
-          echo "### 🔍 Secrets détectés (Top 20)" >> $(summaryFile)
+          echo "### Secrets détectés (Top 20)" >> $(summaryFile)
           jq -r '
             if (. | length) == 0 then
               "Aucun secret détecté."
             else
-              .[:20][] | 
+              .[:20][] |
               "- **Fichier :** " + .File + ", **Ligne :** " + (.StartLine|tostring) + ", **Règle :** " + .RuleID + ", **Secret :** `" + (.Secret // "non affiché") + "`"
             end' $(reportDir)/gitleaks.json >> $(summaryFile)
           echo "" >> $(summaryFile)
-        displayName: "📝 Générer résumé Markdown"
+        displayName: "Générer résumé Markdown"
 
       - script: |
-          echo "🛠️ Génération du rapport HTML simplifié (top 100)"
+          echo "Générer rapport HTML simplifié (top 100)"
           mkdir -p $(artifactHtmlDir)
           echo "<html><head><meta charset='UTF-8'><title>Rapport Gitleaks</title></head><body><h1>Secrets détectés</h1><p><em>(Top 100)</em></p><ul>" > $(artifactHtmlDir)/gitleaks.html
           jq -r '
-            .[:100][] | 
+            .[:100][] |
             "<li><strong>" + .RuleID + "</strong> dans <code>" + .File + "</code> (ligne " + (.StartLine|tostring) + ") : <code>" + (.Secret // "non affiché") + "</code></li>"
           ' $(reportDir)/gitleaks.json >> $(artifactHtmlDir)/gitleaks.html
           echo "</ul></body></html>" >> $(artifactHtmlDir)/gitleaks.html
-        displayName: "🖥️ Générer HTML Gitleaks simplifié"
+        displayName: "Générer HTML Gitleaks simplifié"
 
       - task: PublishBuildArtifacts@1
-        displayName: '📤 Publier rapports HTML Gitleaks'
+        displayName: 'Publier rapports HTML Gitleaks'
         inputs:
           PathtoPublish: '$(artifactHtmlDir)'
           ArtifactName: 'Gitleaks-HTML-Reports'
           publishLocation: 'Container'
 
       - task: PublishBuildArtifacts@1
-        displayName: '📤 Publier résumé Markdown Gitleaks'
+        displayName: 'Publier résumé Markdown Gitleaks'
         inputs:
           PathtoPublish: '$(Build.ArtifactStagingDirectory)'
           ArtifactName: 'Gitleaks-Summary'
           publishLocation: 'Container'
 
       - script: |
-          echo "📎 Affichage du résumé Markdown dans la page du pipeline"
+          echo "Installation de git-filter-repo"
+          sudo apt-get update && sudo apt-get install -y python3-pip
+          pip3 install --user git-filter-repo
+          export PATH=$PATH:~/.local/bin
+
+          echo "Extraction des secrets pour nettoyage"
+          jq -r '.[].Secret' $(reportDir)/gitleaks.json | sort -u > $(reportDir)/secrets.txt
+
+          echo "Préparation du fichier de remplacement git-filter-repo"
+          awk '{print $0 "==>REDACTED"}' $(reportDir)/secrets.txt > $(reportDir)/replacements.txt
+
+          echo "Lancement de git-filter-repo pour nettoyer l'historique"
+          git filter-repo --replace-text $(reportDir)/replacements.txt
+
+          echo "Nettoyage terminé, forcer le push"
+        displayName: "Nettoyer historique avec git-filter-repo"
+
+      - script: |
+          echo "Push forcé de l'historique nettoyé"
+          git push origin HEAD:main --force
+        condition: eq(variables['allowForcePush'], 'true')
+        displayName: "Push force sur remote"
+
+      - script: |
+          echo "Afficher résumé Markdown dans la page pipeline"
           echo "##vso[task.addattachment type=Distributedtask.Core.Summary;name=Rapport Gitleaks;]$(summaryFile)"
-        displayName: 'Afficher résumé dans la page du pipeline'
+        displayName: "Afficher résumé dans la page du pipeline"
